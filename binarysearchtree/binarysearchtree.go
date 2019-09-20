@@ -142,6 +142,50 @@ func (n *Node) Search(key int) bool {
 	return true
 }
 
+// Exact retrieves a node from the tree for the specified key, or nil.
+func (n *Node) Exact(key int) *Node {
+	if n == nil {
+		return nil
+	}
+
+	if key < n.Key {
+		if n.Left == nil {
+			return nil
+		}
+		return n.Left.Exact(key)
+	}
+
+	if key > n.Key {
+		if n.Right == nil {
+			return nil
+		}
+		return n.Right.Exact(key)
+	}
+
+	return n
+}
+
+// Nearest retrieves the nearest node from the tree for the specified key, or nil.
+func (n *Node) Nearest(key int) *Node {
+	if n == nil {
+		return nil
+	}
+
+	if key < n.Key {
+		if n.Left != nil {
+			return n.Left.Nearest(key)
+		}
+	}
+
+	if key > n.Key {
+		if n.Right != nil {
+			return n.Right.Nearest(key)
+		}
+	}
+
+	return n
+}
+
 // Remove removes the node associated with the given key and returns it.
 func (n *Node) Remove(key int) *Node {
 	return remove(n, key)

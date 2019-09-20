@@ -3,6 +3,7 @@ package binarysearchtree
 import (
 	"fmt"
 	"testing"
+	"time"
 )
 
 var bst *Node
@@ -113,5 +114,54 @@ func TestRemove(t *testing.T) {
 
 	if fmt.Sprintf("%s", bst.Min().Value) != "2" {
 		t.Errorf("min should be 2, got %s", bst.Min().Value)
+	}
+}
+
+func TestDates(t *testing.T) {
+	ranges := []struct {
+		BeginDate time.Time
+		EndDate   time.Time
+		Value     float64
+	}{
+		{
+			time.Date(2009, time.January, 1, 0, 0, 0, 0, time.UTC),
+			time.Date(2009, time.June, 1, 0, 0, 0, 0, time.UTC),
+			60.5,
+		},
+		{
+			time.Date(2009, time.June, 1, 0, 0, 0, 1, time.UTC),
+			time.Date(2009, time.December, 1, 0, 0, 0, 0, time.UTC),
+			65.5,
+		},
+		{
+			time.Date(2009, time.December, 1, 0, 0, 0, 1, time.UTC),
+			time.Date(2010, time.June, 1, 0, 0, 0, 0, time.UTC),
+			70.5,
+		},
+		{
+			time.Date(2010, time.June, 1, 0, 0, 0, 1, time.UTC),
+			time.Date(2010, time.December, 1, 0, 0, 0, 0, time.UTC),
+			75.5,
+		},
+		{
+			time.Date(2010, time.December, 1, 0, 0, 0, 1, time.UTC),
+			time.Date(2011, time.June, 1, 0, 0, 0, 0, time.UTC),
+			80.5,
+		},
+	}
+
+	middle := len(ranges) / 2
+	bst := &Node{Key: int(ranges[middle].BeginDate.Unix()), Value: ranges[middle].Value}
+
+	for i := range ranges {
+		if i == middle {
+			continue
+		}
+		bst.Insert(int(ranges[i].BeginDate.Unix()), ranges[i].Value)
+	}
+
+	out := bst.Nearest(int(time.Date(2009, time.June, 2, 0, 0, 0, 1, time.UTC).Unix()))
+	if out.Value != 65.5 {
+		t.Fatalf("expected %f, got %f", 65.5, out.Value)
 	}
 }
