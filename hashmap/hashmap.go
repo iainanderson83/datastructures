@@ -1,16 +1,25 @@
+// runtime.memhash implementation taken from:
+// https://github.com/dgraph-io/ristretto/blob/master/z/rtutil.go
+// License can be found:
+// https://raw.githubusercontent.com/dgraph-io/ristretto/master/LICENSE
+
 package hashmap
 
 import (
-	"fmt"
 	"math"
 	"strings"
+	"unsafe"
 
 	"github.com/segmentio/fasthash/fnv1a"
 )
 
+type stringStruct struct {
+	str unsafe.Pointer
+	len int
+}
+
 var (
 	bucketSize float64 = 3
-	debug      bool
 )
 
 type tuple struct {
@@ -22,13 +31,27 @@ type tuple struct {
 type Hashmap struct {
 	loadFactor float64
 	buckets    [][]tuple
+	fn         func(string) uint64
+}
+
+// NewFNV1aHashmap returns a hashmap using the fnv1a
+// hashing function.
+func NewFNV1aHashmap() *Hashmap {
+	return NewHashmap(fnv1a.HashString64)
+}
+
+// NewRuntimeHashmap returns a hashmap using the runtime.memhash
+// hashing function.
+func NewRuntimeHashmap() *Hashmap {
+	return NewHashmap(memHashString)
 }
 
 // NewHashmap creates a new, empty, hashmap.
-func NewHashmap() *Hashmap {
+func NewHashmap(fn func(string) uint64) *Hashmap {
 	return &Hashmap{
 		loadFactor: 0.75,
 		buckets:    make([][]tuple, int(math.Pow(2, bucketSize))),
+		fn:         fn,
 	}
 }
 
@@ -36,7 +59,7 @@ func NewHashmap() *Hashmap {
 // Redistribution of keys occurs if load factor is surpassed.
 func (h *Hashmap) Add(k string, v interface{}) {
 	k = strings.ToLower(k)
-	hash := fnv1a.HashString64(k)
+	hash := h.fn(k)
 	idx := hash & uint64(len(h.buckets)-1)
 
 	var added bool
@@ -61,12 +84,10 @@ func (h *Hashmap) Add(k string, v interface{}) {
 			panic("invalid number of buckets")
 		}
 
-		print("before: %+v", h.buckets)
-
 		for i := range h.buckets {
 			for j := range h.buckets[i] {
 				key := strings.ToLower(h.buckets[i][j].key)
-				hash := fnv1a.HashString64(key)
+				hash := h.fn(key)
 				idx := hash & uint64(len(newBuckets)-1)
 
 				var added bool
@@ -84,14 +105,6 @@ func (h *Hashmap) Add(k string, v interface{}) {
 			}
 		}
 		h.buckets = newBuckets
-
-		print("after: %+v", h.buckets)
-	}
-}
-
-func print(msg string, args ...interface{}) {
-	if debug {
-		fmt.Printf(msg+"\n", args...)
 	}
 }
 
@@ -103,7 +116,7 @@ func isPowof2(n int) bool {
 // the specified key.
 func (h *Hashmap) Lookup(k string) interface{} {
 	k = strings.ToLower(k)
-	hash := fnv1a.HashString64(k)
+	hash := h.fn(k)
 	idx := hash & uint64(len(h.buckets)-1)
 
 	for _, tpl := range h.buckets[idx] {
@@ -113,4 +126,24 @@ func (h *Hashmap) Lookup(k string) interface{} {
 	}
 
 	return nil
+}
+
+//go:noescape
+//go:linkname memhash runtime.memhash
+func memhash(p unsafe.Pointer, h, s uintptr) uintptr
+
+// MemHash is the hash function used by go map, it utilizes available hardware instructions(behaves
+// as aeshash if aes instruction is available).
+// NOTE: The hash seed changes for every process. So, this cannot be used as a persistent hash.
+func memHash(data []byte) uint64 {
+	ss := (*stringStruct)(unsafe.Pointer(&data))
+	return uint64(memhash(ss.str, 0, uintptr(ss.len)))
+}
+
+// MemHashString is the hash function used by go map, it utilizes available hardware instructions
+// (behaves as aeshash if aes instruction is available).
+// NOTE: The hash seed changes for every process. So, this cannot be used as a persistent hash.
+func memHashString(str string) uint64 {
+	ss := (*stringStruct)(unsafe.Pointer(&str))
+	return uint64(memhash(ss.str, 0, uintptr(ss.len)))
 }

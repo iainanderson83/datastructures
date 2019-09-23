@@ -63,11 +63,11 @@ func TestMap(t *testing.T) {
 
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			debug = test.debug
-
-			m := NewHashmap()
+			m := NewFNV1aHashmap()
+			m2 := NewRuntimeHashmap()
 			for _, tpl := range test.adds {
 				m.Add(tpl.key, tpl.value)
+				m2.Add(tpl.key, tpl.value)
 			}
 
 			for _, tpl := range test.lookups {
@@ -75,7 +75,44 @@ func TestMap(t *testing.T) {
 				if v != tpl.value {
 					t.Fatalf("%s: expected '%v', got '%v'", tpl.key, tpl.value, v)
 				}
+
+				v2 := m2.Lookup(tpl.key)
+				if v2 != tpl.value {
+					t.Fatalf("%s: expected '%v', got '%v'", tpl.key, tpl.value, v2)
+				}
 			}
 		})
+	}
+}
+
+func BenchmarkRuntimeHashmap(b *testing.B) {
+	b.ReportAllocs()
+
+	for i := 0; i < b.N; i++ {
+		m := NewRuntimeHashmap()
+		for _, tpl := range redistributionTuples {
+			m.Add(tpl.key, tpl.value)
+		}
+
+		for _, tpl := range redistributionTuples {
+			v := m.Lookup(tpl.key)
+			_ = v
+		}
+	}
+}
+
+func BenchmarkFNV1aHashmap(b *testing.B) {
+	b.ReportAllocs()
+
+	for i := 0; i < b.N; i++ {
+		m := NewFNV1aHashmap()
+		for _, tpl := range redistributionTuples {
+			m.Add(tpl.key, tpl.value)
+		}
+
+		for _, tpl := range redistributionTuples {
+			v := m.Lookup(tpl.key)
+			_ = v
+		}
 	}
 }
