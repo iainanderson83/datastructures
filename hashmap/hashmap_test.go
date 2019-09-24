@@ -116,3 +116,19 @@ func BenchmarkFNV1aHashmap(b *testing.B) {
 		}
 	}
 }
+
+func BenchmarkGoHashmap(b *testing.B) {
+	b.ReportAllocs()
+
+	for i := 0; i < b.N; i++ {
+		m := make(map[string]interface{})
+		for _, tpl := range redistributionTuples {
+			m[tpl.key] = tpl.value
+		}
+
+		for _, tpl := range redistributionTuples {
+			v := m[tpl.key]
+			_ = v
+		}
+	}
+}
