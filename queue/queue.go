@@ -6,6 +6,12 @@ import (
 	"github.com/iainanderson83/datastructures/stack"
 )
 
+var (
+	_ Queue = &ArrQueue{}
+	_ Queue = NewListQueue()
+	_ Queue = &StackQueue{}
+)
+
 // Queue is an interface for a classic queue datastructure
 type Queue interface {
 	Enqueue(interface{})
@@ -58,7 +64,7 @@ func (l *ListQueue) Dequeue() interface{} {
 	return l.l.Remove(e)
 }
 
-func (l *ListQueue) Len() int { return l.Len() }
+func (l *ListQueue) Len() int { return l.l.Len() }
 
 type StackQueue struct {
 	s1    stack.Stack

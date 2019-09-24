@@ -21,6 +21,10 @@ func TestQueues(t *testing.T) {
 				q.Enqueue(i)
 			}
 
+			if q.Len() != 5 {
+				t.Fatalf("expected 5, got %d", q.Len())
+			}
+
 			for _, i := range in {
 				if q.Dequeue() != i {
 					t.Fatal("out of order")
@@ -57,6 +61,10 @@ func TestQueues2(t *testing.T) {
 
 			if v := q.Dequeue(); v != 4 {
 				t.Fatalf("expected %d, got %d", 4, v)
+			}
+
+			if q.Len() != 1 {
+				t.Fatalf("expected 3, got %d", q.Len())
 			}
 		})
 	}
