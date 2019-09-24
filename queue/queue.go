@@ -12,11 +12,11 @@ type Queue interface {
 	Dequeue() interface{}
 }
 
-type arrQueue struct {
+type ArrQueue struct {
 	s []interface{}
 }
 
-func (a *arrQueue) Enqueue(v interface{}) {
+func (a *ArrQueue) Enqueue(v interface{}) {
 	if v == nil {
 		return
 	}
@@ -24,7 +24,7 @@ func (a *arrQueue) Enqueue(v interface{}) {
 	a.s = append(a.s, v)
 }
 
-func (a *arrQueue) Dequeue() interface{} {
+func (a *ArrQueue) Dequeue() interface{} {
 	if len(a.s) == 0 {
 		return nil
 	}
@@ -35,19 +35,19 @@ func (a *arrQueue) Dequeue() interface{} {
 	return v
 }
 
-type listQueue struct {
+type ListQueue struct {
 	l *list.List
 }
 
-func newListQueue() *listQueue {
-	return &listQueue{list.New()}
+func NewListQueue() *ListQueue {
+	return &ListQueue{list.New()}
 }
 
-func (l *listQueue) Enqueue(v interface{}) {
+func (l *ListQueue) Enqueue(v interface{}) {
 	l.l.PushBack(v)
 }
 
-func (l *listQueue) Dequeue() interface{} {
+func (l *ListQueue) Dequeue() interface{} {
 	if l.l.Len() == 0 {
 		return nil
 	}
@@ -55,12 +55,12 @@ func (l *listQueue) Dequeue() interface{} {
 	return l.l.Remove(e)
 }
 
-type stackQueue struct {
+type StackQueue struct {
 	s1 stack.Stack
 	s2 stack.Stack
 }
 
-func (s *stackQueue) Enqueue(v interface{}) {
+func (s *StackQueue) Enqueue(v interface{}) {
 	if v == nil {
 		return
 	}
@@ -68,7 +68,7 @@ func (s *stackQueue) Enqueue(v interface{}) {
 	s.s1.Push(v)
 }
 
-func (s *stackQueue) Dequeue() interface{} {
+func (s *StackQueue) Dequeue() interface{} {
 	if s.s1.Peek() == nil && s.s2.Peek() == nil {
 		return nil
 	}

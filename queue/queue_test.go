@@ -10,9 +10,9 @@ func TestQueues(t *testing.T) {
 	in := []int{1, 3, 5, 4, 2}
 
 	tests := map[string]Queue{
-		"ArrQueue":   &arrQueue{},
-		"ListQueue":  newListQueue(),
-		"StackQueue": &stackQueue{s1: &stack.ArrStack{}, s2: &stack.ArrStack{}},
+		"ArrQueue":   &ArrQueue{},
+		"ListQueue":  NewListQueue(),
+		"StackQueue": &StackQueue{s1: &stack.ArrStack{}, s2: &stack.ArrStack{}},
 	}
 
 	for name, q := range tests {
@@ -34,9 +34,9 @@ func TestQueues2(t *testing.T) {
 	in := []int{1, 3, 5, 4, 2}
 
 	tests := map[string]Queue{
-		"ArrQueue":   &arrQueue{},
-		"ListQueue":  newListQueue(),
-		"StackQueue": &stackQueue{s1: &stack.ArrStack{}, s2: &stack.ArrStack{}},
+		"ArrQueue":   &ArrQueue{},
+		"ListQueue":  NewListQueue(),
+		"StackQueue": &StackQueue{s1: &stack.ArrStack{}, s2: &stack.ArrStack{}},
 	}
 
 	for name, q := range tests {
