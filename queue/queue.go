@@ -61,8 +61,9 @@ func (l *ListQueue) Dequeue() interface{} {
 func (l *ListQueue) Len() int { return l.Len() }
 
 type StackQueue struct {
-	s1 stack.Stack
-	s2 stack.Stack
+	s1    stack.Stack
+	s2    stack.Stack
+	count int
 }
 
 func (s *StackQueue) Enqueue(v interface{}) {
@@ -70,6 +71,7 @@ func (s *StackQueue) Enqueue(v interface{}) {
 		return
 	}
 
+	s.count++
 	s.s1.Push(v)
 }
 
@@ -88,7 +90,8 @@ func (s *StackQueue) Dequeue() interface{} {
 		}
 	}
 
+	s.count--
 	return s.s2.Pop()
 }
 
-func (s *StackQueue) Len() int { return len(s.s1) + len(s.s2) }
+func (s *StackQueue) Len() int { return s.count }
