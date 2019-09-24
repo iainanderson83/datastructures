@@ -3,7 +3,7 @@ package queue
 import (
 	"testing"
 
-	"github.com/iain.anderson83/datastructures/stack"
+	"github.com/iainanderson83/datastructures/stack"
 )
 
 func TestQueues(t *testing.T) {

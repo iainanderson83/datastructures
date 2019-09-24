@@ -3,7 +3,7 @@ package queue
 import (
 	"container/list"
 
-	"github.com/iain.anderson83/datastructures/stack"
+	"github.com/iainanderson83/datastructures/stack"
 )
 
 // Queue is an interface for a classic queue datastructure
