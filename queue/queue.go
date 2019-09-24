@@ -10,6 +10,7 @@ import (
 type Queue interface {
 	Enqueue(interface{})
 	Dequeue() interface{}
+	Len() int
 }
 
 type ArrQueue struct {
@@ -35,6 +36,8 @@ func (a *ArrQueue) Dequeue() interface{} {
 	return v
 }
 
+func (a *ArrQueue) Len() int { return len(a.s) }
+
 type ListQueue struct {
 	l *list.List
 }
@@ -54,6 +57,8 @@ func (l *ListQueue) Dequeue() interface{} {
 	e := l.l.Front()
 	return l.l.Remove(e)
 }
+
+func (l *ListQueue) Len() int { return l.Len() }
 
 type StackQueue struct {
 	s1 stack.Stack
@@ -85,3 +90,5 @@ func (s *StackQueue) Dequeue() interface{} {
 
 	return s.s2.Pop()
 }
+
+func (s *StackQueue) Len() int { return len(s.s1) + len(s.s2) }
