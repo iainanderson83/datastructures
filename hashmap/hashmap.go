@@ -6,32 +6,35 @@
 package hashmap
 
 import (
-	"math"
+	"fmt"
 	"strings"
-	"unsafe"
+	"sync/atomic"
 
+	"github.com/cespare/xxhash"
 	"github.com/segmentio/fasthash/fnv1a"
 )
 
-type stringStruct struct {
-	str unsafe.Pointer
-	len int
-}
-
 var (
-	bucketSize float64 = 3
+	// make them var for tests
+	loadFactor = 0.75 // if this goes below 0.5 the bounds won't work
+	length     = 3
 )
 
-type tuple struct {
+type entry struct {
+	hash  uint64
 	key   string
 	value interface{}
 }
 
 // Hashmap is a naive implementation of a hashmap struct.
 type Hashmap struct {
-	loadFactor float64
-	buckets    [][]tuple
-	fn         func(string) uint64
+	lbound int
+	ubound int
+	length int
+	fn     func(string) uint64
+
+	lock    uintptr
+	buckets [][8]entry
 }
 
 // NewFNV1aHashmap returns a hashmap using the fnv1a
@@ -40,110 +43,179 @@ func NewFNV1aHashmap() *Hashmap {
 	return NewHashmap(fnv1a.HashString64)
 }
 
-// NewRuntimeHashmap returns a hashmap using the runtime.memhash
+// NewXXHashmap returns a hashmap using the xxhash
 // hashing function.
-func NewRuntimeHashmap() *Hashmap {
-	return NewHashmap(memHashString)
+func NewXXHashmap() *Hashmap {
+	return NewHashmap(xxhash.Sum64String)
 }
 
 // NewHashmap creates a new, empty, hashmap.
 func NewHashmap(fn func(string) uint64) *Hashmap {
-	return &Hashmap{
-		loadFactor: 0.75,
-		buckets:    make([][]tuple, int(math.Pow(2, bucketSize))),
-		fn:         fn,
+	return newWithCap(fn, 1<<length)
+}
+
+func newWithCap(fn func(string) uint64, cap int) *Hashmap {
+	h := &Hashmap{
+		lbound:  int(float64(int(1)<<length) * (1 - loadFactor)),
+		ubound:  int(float64(int(1)<<length) * loadFactor),
+		length:  cap,
+		buckets: make([][8]entry, cap),
+		fn:      fn,
 	}
+
+	if h.lbound == 1<<length || h.ubound == 1<<length {
+		panic("invalid load factor")
+	}
+
+	return h
 }
 
 // Add inserts the value v associated with the key k into the hashmap.
 // Redistribution of keys occurs if load factor is surpassed.
-func (h *Hashmap) Add(k string, v interface{}) {
-	k = strings.ToLower(k)
-	hash := h.fn(k)
-	idx := hash & uint64(len(h.buckets)-1)
-
-	var added bool
-	for i, tpl := range h.buckets[idx] {
-		if tpl.key == k {
-			h.buckets[idx][i] = tuple{k, v}
-			added = true
+func (h *Hashmap) Add(k string, v interface{}) bool {
+	for {
+		if atomic.CompareAndSwapUintptr(&h.lock, 0, 1) {
 			break
 		}
 	}
 
-	if !added {
-		h.buckets[idx] = append(h.buckets[idx], tuple{k, v})
+	hash := h.fn(k)
+	idx := hash & (uint64(h.length) - 1)
+
+	var (
+		exists bool
+		length int
+		target = -1
+	)
+	for i := range h.buckets[idx] {
+		if h.buckets[idx][i].hash == hash {
+			h.buckets[idx][i].value = v
+			exists = true
+		}
+
+		if h.buckets[idx][i].hash <= 0 {
+			if target == -1 {
+				target = i
+			}
+		} else {
+			length++
+		}
+	}
+
+	if !exists {
+		if target == -1 {
+			target = length
+		}
+		h.buckets[idx][target].hash = hash
+		h.buckets[idx][target].key = k
+		h.buckets[idx][target].value = v
 	}
 
 	// Assume even distribution
-	if float64(len(h.buckets[idx]))/math.Pow(2, bucketSize) > h.loadFactor {
-		// Redistribute
-		newBuckets := make([][]tuple, int(math.Pow(2, math.Log2(float64(len(h.buckets)))+1)))
-
-		if !isPowof2(len(newBuckets)) {
-			panic("invalid number of buckets")
-		}
-
-		for i := range h.buckets {
-			for j := range h.buckets[i] {
-				key := strings.ToLower(h.buckets[i][j].key)
-				hash := h.fn(key)
-				idx := hash & uint64(len(newBuckets)-1)
-
-				var added bool
-				for l, tpl := range newBuckets[idx] {
-					if tpl.key == key {
-						newBuckets[idx][l] = tuple{key, h.buckets[i][j].value}
-						added = true
-						break
-					}
-				}
-
-				if !added {
-					newBuckets[idx] = append(newBuckets[idx], tuple{key, h.buckets[i][j].value})
-				}
-			}
-		}
-		h.buckets = newBuckets
+	if length >= h.ubound {
+		h.length *= 2
+		h.resize()
 	}
+
+	atomic.StoreUintptr(&h.lock, 0)
+	return !exists
 }
 
-func isPowof2(n int) bool {
-	return n != 0 && (n&(n-1)) == 0
+// Delete removes the key from the map, if it exists,
+// and returns whether or not it was deleted.
+func (h *Hashmap) Delete(k string) bool {
+	for {
+		if atomic.CompareAndSwapUintptr(&h.lock, 0, 1) {
+			break
+		}
+	}
+
+	hash := h.fn(k)
+	idx := hash & (uint64(h.length) - 1)
+
+	var (
+		exists bool
+		length int
+	)
+	for i := range h.buckets[idx] {
+		if h.buckets[idx][i].hash == hash {
+			h.buckets[idx][i].hash = 0
+			h.buckets[idx][i].key = ""
+			h.buckets[idx][i].value = nil
+			exists = true
+		}
+
+		if h.buckets[idx][i].hash > 0 {
+			length++
+		}
+	}
+
+	if length <= h.lbound {
+		h.length /= 2
+		h.resize()
+	}
+
+	atomic.StoreUintptr(&h.lock, 0)
+	return exists
+}
+
+func (h *Hashmap) resize() {
+	buckets := make([][8]entry, h.length)
+
+	for i := range h.buckets {
+		var length int
+		for j := range h.buckets[i] {
+			if h.buckets[i][j].hash == 0 {
+				continue
+			}
+			idx := h.buckets[i][j].hash & (uint64(h.length) - 1)
+
+			buckets[idx][length] = h.buckets[i][j]
+			length++
+		}
+	}
+
+	h.buckets = buckets
 }
 
 // Lookup will try to retrieve the value associated with
 // the specified key.
-func (h *Hashmap) Lookup(k string) interface{} {
-	k = strings.ToLower(k)
-	hash := h.fn(k)
-	idx := hash & uint64(len(h.buckets)-1)
-
-	for _, tpl := range h.buckets[idx] {
-		if tpl.key == k {
-			return tpl.value
+func (h *Hashmap) Lookup(k string) (interface{}, bool) {
+	for {
+		if atomic.CompareAndSwapUintptr(&h.lock, 0, 1) {
+			break
 		}
 	}
 
-	return nil
+	hash := h.fn(k)
+	idx := hash & (uint64(h.length) - 1)
+
+	for i := range h.buckets[idx] {
+		if h.buckets[idx][i].hash == hash {
+			atomic.StoreUintptr(&h.lock, 0)
+			return h.buckets[idx][i].value, true
+		}
+	}
+
+	atomic.StoreUintptr(&h.lock, 0)
+	return nil, false
 }
 
-//go:noescape
-//go:linkname memhash runtime.memhash
-func memhash(p unsafe.Pointer, h, s uintptr) uintptr
+func spew(buckets [][8]entry) string {
+	var lengths []int
+	for i := range buckets {
+		var length int
+		for j := range buckets[i] {
+			if buckets[i][j].hash != 0 {
+				length++
+			}
+		}
+		lengths = append(lengths, int(length))
+	}
 
-// MemHash is the hash function used by go map, it utilizes available hardware instructions(behaves
-// as aeshash if aes instruction is available).
-// NOTE: The hash seed changes for every process. So, this cannot be used as a persistent hash.
-func memHash(data []byte) uint64 {
-	ss := (*stringStruct)(unsafe.Pointer(&data))
-	return uint64(memhash(ss.str, 0, uintptr(ss.len)))
-}
-
-// MemHashString is the hash function used by go map, it utilizes available hardware instructions
-// (behaves as aeshash if aes instruction is available).
-// NOTE: The hash seed changes for every process. So, this cannot be used as a persistent hash.
-func memHashString(str string) uint64 {
-	ss := (*stringStruct)(unsafe.Pointer(&str))
-	return uint64(memhash(ss.str, 0, uintptr(ss.len)))
+	var b strings.Builder
+	for i := range lengths {
+		b.WriteString(fmt.Sprintf("[%d]", lengths[i]))
+	}
+	return b.String()
 }
