@@ -159,25 +159,6 @@ func (h *Hashmap) Delete(k string) bool {
 	return exists
 }
 
-func (h *Hashmap) resize() {
-	buckets := make([][8]entry, h.length)
-
-	for i := range h.buckets {
-		var length int
-		for j := range h.buckets[i] {
-			if h.buckets[i][j].hash == 0 {
-				continue
-			}
-			idx := h.buckets[i][j].hash & (uint64(h.length) - 1)
-
-			buckets[idx][length] = h.buckets[i][j]
-			length++
-		}
-	}
-
-	h.buckets = buckets
-}
-
 // Lookup will try to retrieve the value associated with
 // the specified key.
 func (h *Hashmap) Lookup(k string) (interface{}, bool) {
@@ -199,6 +180,70 @@ func (h *Hashmap) Lookup(k string) (interface{}, bool) {
 
 	atomic.StoreUintptr(&h.lock, 0)
 	return nil, false
+}
+
+// Iter calls the provided cb for each key/value pair in the map.
+func (h *Hashmap) Iter(fn func(k string, v interface{}) bool) {
+	if fn == nil {
+		return
+	}
+
+	for {
+		if atomic.CompareAndSwapUintptr(&h.lock, 0, 1) {
+			break
+		}
+	}
+
+	for i := range h.buckets {
+		for j := range h.buckets[i] {
+			if !fn(h.buckets[i][j].key, h.buckets[i][j].value) {
+				atomic.StoreUintptr(&h.lock, 0)
+				return
+			}
+		}
+	}
+
+	atomic.StoreUintptr(&h.lock, 0)
+}
+
+// Len returns the number of elements in the map.
+func (h *Hashmap) Len() int {
+	for {
+		if atomic.CompareAndSwapUintptr(&h.lock, 0, 1) {
+			break
+		}
+	}
+
+	var length int
+	for i := range h.buckets {
+		for j := range h.buckets[i] {
+			if h.buckets[i][j].hash > 0 {
+				length++
+			}
+		}
+	}
+
+	atomic.StoreUintptr(&h.lock, 0)
+	return length
+}
+
+func (h *Hashmap) resize() {
+	buckets := make([][8]entry, h.length)
+
+	for i := range h.buckets {
+		var length int
+		for j := range h.buckets[i] {
+			if h.buckets[i][j].hash == 0 {
+				continue
+			}
+			idx := h.buckets[i][j].hash & (uint64(h.length) - 1)
+
+			buckets[idx][length] = h.buckets[i][j]
+			length++
+		}
+	}
+
+	h.buckets = buckets
 }
 
 func spew(buckets [][8]entry) string {
